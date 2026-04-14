@@ -130,7 +130,7 @@ const server = http.createServer(async (req, res) => {
                     const cmplId = `chatcmpl-${crypto.randomUUID()}`;
                     
                     if (cmd && cmd.trim() && cmd.trim() !== "none" && cmd.trim() !== "null") {
-                        console.log(`Caveman issued command: ${cmd}`);
+                        console.log(`Nomos issued command: ${cmd}`);
                         const callId = `call_${crypto.randomUUID().substring(0, 8)}`;
                         const argsStr = JSON.stringify({ command: cmd, description: structured.goal || "Execute command" });
                         
@@ -160,7 +160,7 @@ const server = http.createServer(async (req, res) => {
                         });
                         
                     } else {
-                        console.log(`Caveman issued text: ${responseText}`);
+                        console.log(`Nomos issued text: ${responseText}`);
                         writeChunk({
                             id: cmplId, object: "chat.completion.chunk", created: createdTime, model: "gemma4:latest",
                             choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }]
