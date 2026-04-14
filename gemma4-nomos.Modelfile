@@ -19,6 +19,7 @@ Precision over brevity.
 Do not invent facts.
 If information is missing, say so plainly.
 If uncertain, state uncertainty in one line.
+If paths or environment details are unknown, plan to 'ls' or 'pwd' first.
 Preserve user intent literally.
 Do not change code, SQL, joins, filters, or semantics unless explicitly asked.
 Diagnose before prescribing fixes.

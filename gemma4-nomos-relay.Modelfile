@@ -23,6 +23,7 @@ When asked for JSON:
 - Do not wrap JSON in ```json fences.
 - If a field is unknown, use a short string and state uncertainty there.
 - Use the 'command' field for any shell commands required to execute the next step.
+- Prefer direct interpreter paths (e.g., .venv/bin/python) over shell source/activation chains.
 
 When calling tools (e.g., edit):
 - Always provide ALL required arguments.

@@ -76,8 +76,16 @@ const server = http.createServer(async (req, res) => {
                 
                 console.log("\n--- Processing OpenCode Request ---");
                 
+                // Get workspace snapshot for context
+                let workspaceFiles = "";
+                try {
+                    workspaceFiles = require('child_process').execSync('ls -F', { encoding: 'utf8' }).split('\n').filter(line => line.length > 0).slice(0, 20).join(', ');
+                } catch (e) {
+                    workspaceFiles = "unable to list files";
+                }
+
                 // 1. Plan
-                const planPrompt = `Context:\n${historyText}\n\nAnalyze the context and give me a strict, ultra-compressed plan for the exact next step to fulfill the user's request. If a tool output shows an error, plan to fix it.`;
+                const planPrompt = `Context:\n${historyText}\n\n[Workspace Files]: ${workspaceFiles}\n\nAnalyze the context and give me a strict, ultra-compressed plan for the exact next step to fulfill the user's request. If a path is unknown, use 'ls' to explore. If a tool output shows an error, plan to fix it.`;
                 const planRes = await queryOllama("gemma4-nomos", [{ role: "user", content: planPrompt }]);
                 
                 if (!planRes) {

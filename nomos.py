@@ -39,6 +39,12 @@ PROFILES = {
         allow_mutation=True,
         mutating_allowlist=["mkdir", "touch", "git"],
         read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git"]
+    ),
+    "developer": Profile(
+        "developer",
+        allow_mutation=True,
+        mutating_allowlist=["mkdir", "touch", "git", "python3", "python", "node", "npm", "pip"],
+        read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git", "ls -R"]
     )
 }
 
