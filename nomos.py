@@ -29,13 +29,6 @@ class Profile:
         self.workspace_root = workspace_root
 
 PROFILES = {
-    "cave": Profile(
-        "cave",
-        allow_mutation=True,
-        mutating_allowlist=["mkdir", "touch", "git"],
-        read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git"],
-        workspace_root="~/cave"
-    ),
     "read-only": Profile(
         "read-only",
         allow_mutation=False,
