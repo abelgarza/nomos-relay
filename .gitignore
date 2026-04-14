@@ -1,0 +1,5 @@
+__pycache__/
+.nomos/
+*.log
+last_plan.txt
+last_relay.json

@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "goal": { "type": "string" },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "result": { "type": "string" },
+    "uncertainty": { "type": "string" },
+    "next": { "type": "string" },
+    "command": { "type": "string" }
+  },
+  "required": ["goal", "constraints", "result", "uncertainty", "next"]
+}
