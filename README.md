@@ -49,5 +49,9 @@ Every workspace managed by Nomos contains a `.nomos/` directory with a full audi
 - `last_plan.txt`: The reasoning trace.
 - `last_relay.json`: The structured command output.
 
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
 ---
 *Created by Abel Garza Ramírez. A Cybernetic approach to AI Agency.*
