@@ -38,6 +38,26 @@ Use the provided wrapper to launch OpenCode with the Nomos Relay proxy:
 ./oc-nomos.sh
 ```
 
+**Configuration (`~/.config/opencode/opencode.json`):**
+Register Nomos as a provider:
+```json
+"provider": {
+  "nomos": {
+    "name": "Nomos Relay",
+    "npm": "@ai-sdk/openai-compatible",
+    "options": {
+      "baseURL": "http://127.0.0.1:11435/v1",
+      "apiKey": "nomos"
+    },
+    "models": {
+      "gemma4:latest": {
+        "name": "gemma4:latest"
+      }
+    }
+  }
+}
+```
+
 ## Security Profiles
 - **`read-only`**: Default. No system mutations allowed.
 - **`repo-safe`**: Allows common developer actions (`git`, `touch`, `mkdir`).
