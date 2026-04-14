@@ -90,10 +90,10 @@ class Runtime:
             os.makedirs(self.workspace, exist_ok=True)
 
     def log(self, log_type, content):
-        caveman_dir = os.path.join(self.workspace, STATE_DIR_NAME)
-        if not os.path.exists(caveman_dir):
+        nomos_dir = os.path.join(self.workspace, STATE_DIR_NAME)
+        if not os.path.exists(nomos_dir):
             try:
-                os.makedirs(caveman_dir, exist_ok=True)
+                os.makedirs(nomos_dir, exist_ok=True)
                 # Add to .gitignore if in git repo
                 if os.path.exists(os.path.join(self.workspace, ".git")):
                     gitignore_path = os.path.join(self.workspace, ".gitignore")
@@ -111,13 +111,13 @@ class Runtime:
         
         try:
             if log_type == "journal":
-                with open(os.path.join(caveman_dir, "journal.log"), "a") as f:
+                with open(os.path.join(nomos_dir, "journal.log"), "a") as f:
                     f.write(f"[{datetime.now().isoformat()}] {content}\n")
             elif log_type == "plan":
-                with open(os.path.join(caveman_dir, "last_plan.txt"), "w") as f:
+                with open(os.path.join(nomos_dir, "last_plan.txt"), "w") as f:
                     f.write(content + "\n")
             elif log_type == "relay":
-                with open(os.path.join(caveman_dir, "last_relay.json"), "w") as f:
+                with open(os.path.join(nomos_dir, "last_relay.json"), "w") as f:
                     f.write(content + "\n")
         except Exception as e:
             print(f"Logging error: {e}", file=sys.stderr)
