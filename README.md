@@ -61,7 +61,6 @@ Register Nomos as a provider:
 ## Security Profiles
 - **`read-only`**: Default. No system mutations allowed.
 - **`repo-safe`**: Allows common developer actions (`git`, `touch`, `mkdir`).
-- **`cave`**: A sandbox profile restricted to `~/cave`.
 
 ## State & Audit
 Every workspace managed by Nomos contains a `.nomos/` directory with a full audit trail:

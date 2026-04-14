@@ -299,14 +299,14 @@ class Runtime:
             print(f"Failed to parse relay JSON: {relay_content}", file=sys.stderr)
 
 def main():
-    parser = argparse.ArgumentParser(description="Caveman: Profile-based Workspace Agent Runtime")
+    parser = argparse.ArgumentParser(description="Nomos: Profile-based Workspace Agent Runtime")
     
     # Check if we should use the new task-centric CLI or compatibility mode
     if len(sys.argv) > 1 and sys.argv[1] not in ["ask", "list", "build", "-h", "--help"]:
         # New task-centric CLI (but also used for legacy if no flags)
         parser.add_argument("task", help="Task to execute")
         parser.add_argument("--workspace", default=os.getcwd(), help="Workspace directory")
-        parser.add_argument("--profile", default="read-only", help="Profile name (cave, read-only, repo-safe)")
+        parser.add_argument("--profile", default="read-only", help="Profile name (read-only, repo-safe)")
         parser.add_argument("--execute", action="store_true", help="Execute mutating actions")
         args = parser.parse_args()
         

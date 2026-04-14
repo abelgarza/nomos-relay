@@ -193,5 +193,5 @@ const server = http.createServer(async (req, res) => {
 
 const PORT = 11435;
 server.listen(PORT, '127.0.0.1', () => {
-    console.log(`Starting Node.js Caveman Proxy on http://127.0.0.1:${PORT}/v1`);
+    console.log(`Starting Node.js Nomos Proxy on http://127.0.0.1:${PORT}/v1`);
 });
