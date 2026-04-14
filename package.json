@@ -1,6 +1,6 @@
 {
   "name": "nomos-relay",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "A cybernetic orchestration framework for local AI agents.",
   "main": "proxy.js",
   "scripts": {
