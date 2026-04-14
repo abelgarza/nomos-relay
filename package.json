@@ -1,0 +1,24 @@
+{
+  "name": "nomos-relay",
+  "version": "1.0.0",
+  "description": "A cybernetic orchestration framework for local AI agents.",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "test": "bash smoke.sh"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "cibernetics",
+    "gemma4",
+    "ollama"
+  ],
+  "author": "Abel Garza Ramírez",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abelgarza/nomos-relay.git"
+  }
+}
