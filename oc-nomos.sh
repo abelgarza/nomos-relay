@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Resolve relative directory
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve relative directory (handling symlinks)
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 PROXY_SCRIPT="$DIR/proxy.js"
 PROXY_PORT=11435
