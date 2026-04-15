@@ -130,7 +130,7 @@ class Runtime:
         try:
             # 0. Git Protection
             if git.is_git_repo():
-                git.ensure_safe_branch(".nomos")
+                git.ensure_safe_branch("nomos-auto")
 
             # 1. Reconnaissance
             env_context = ""

@@ -15,7 +15,7 @@ RULES:
 - Base the message on the actual diff provided, using the task description as context.
 """
 
-MESSAGE user Generate a concise Conventional Commit message for the following changes.
+MESSAGE user """Generate a concise Conventional Commit message for the following changes.
 TASK CONTEXT: Add error handling to database connection
 
 GIT DIFF:
@@ -29,5 +29,5 @@ GIT DIFF:
 +    except Exception as e:
 +        raise ConnectionError(e)
 
-Output ONLY the commit message string. Do not use quotes or explanations. Format: type(scope): description
+Output ONLY the commit message string. Do not use quotes or explanations. Format: type(scope): description"""
 MESSAGE assistant feat(db): add error handling to connection function

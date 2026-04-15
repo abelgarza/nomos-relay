@@ -30,11 +30,11 @@ TASK GUIDELINES:
 - If the objective is complete, return an empty tasks array.
 """
 
-MESSAGE user Break down the objective into tasks.
+MESSAGE user """Break down the objective into tasks.
 OBJECTIVE: Create a hello world in Go.
 EXISTING PROJECT CONTEXT: {}
-RECENT LOGS: ""
-MESSAGE assistant {
+RECENT LOGS: "" """
+MESSAGE assistant """{
   "updated_context": {
     "tech_stack": "Go",
     "architecture": "Single-file script",
@@ -45,4 +45,4 @@ MESSAGE assistant {
     "Create main.go with hello world code",
     "Run the program with 'go run main.go'"
   ]
-}
+}"""
