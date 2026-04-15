@@ -76,16 +76,26 @@ const server = http.createServer(async (req, res) => {
                 
                 console.log("\n--- Processing OpenCode Request ---");
                 
-                // Get workspace snapshot for context
-                let workspaceFiles = "";
+                // Get workspace snapshot for context via RAG
+                let ragContext = "";
                 try {
-                    workspaceFiles = require('child_process').execSync('ls -F', { encoding: 'utf8' }).split('\n').filter(line => line.length > 0).slice(0, 20).join(', ');
+                    const lastUserMsg = messages.filter(m => m.role === "user").pop()?.content || "";
+                    if (lastUserMsg) {
+                        const cleanQuery = lastUserMsg.replace(/"/g, '\\"').replace(/\n/g, ' ');
+                        ragContext = require('child_process').execSync(`/home/abelg/dev/personal/.venv_py314/bin/python3 nomos_rag.py --query "${cleanQuery}"`, { encoding: 'utf8' });
+                    }
                 } catch (e) {
-                    workspaceFiles = "unable to list files";
+                    console.error("RAG Query failed:", e.message);
                 }
 
                 // 1. Plan
-                const planPrompt = `Context:\n${historyText}\n\n[Workspace Files]: ${workspaceFiles}\n\nAnalyze the context and give me a strict, ultra-compressed plan for the exact next step to fulfill the user's request. If a path is unknown, use 'ls' to explore. If a tool output shows an error, plan to fix it.`;
+                let planPrompt = `Context:\n${historyText}\n\n`;
+                if (ragContext) {
+                    planPrompt += `[RAG Code Context]:\n${ragContext}\n\n`;
+                    console.log("RAG Context Injected into Proxy");
+                }
+                
+                planPrompt += `Analyze the context and give me a strict, ultra-compressed plan for the exact next step to fulfill the user's request. If a path is unknown, use 'ls' to explore. If a tool output shows an error, plan to fix it.`;
                 const planRes = await queryOllama("gemma4-nomos", [{ role: "user", content: planPrompt }]);
                 
                 if (!planRes) {

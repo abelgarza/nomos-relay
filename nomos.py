@@ -181,9 +181,30 @@ class Runtime:
         return True, "", is_mutation
 
     def run_task(self, task):
+        # 0. RAG Context
+        rag_context = ""
+        try:
+            from nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+            db_path = os.path.join(self.workspace, STATE_DIR_NAME, "vector_store")
+            if os.path.exists(db_path):
+                embedder = OllamaEmbeddingProvider()
+                store = LanceDBProvider(db_path)
+                manager = RAGManager(self.workspace, embedder, store)
+                rag_context = manager.query(task)
+                if rag_context:
+                    print(f"--- RAG Context Injected ---", file=sys.stderr)
+        except Exception:
+            # Silent fallback if RAG is not initialized or dependencies missing
+            pass
+
         # 1. Plan
         print(f"--- Planning [gemma4-nomos] ---", file=sys.stderr)
-        plan_messages = [{"role": "user", "content": f"Give me a plan for: {task}"}]
+        
+        plan_prompt = f"Task: {task}"
+        if rag_context:
+            plan_prompt = f"Context from workspace:\n{rag_context}\n\nTask: {task}"
+            
+        plan_messages = [{"role": "user", "content": plan_prompt}]
         plan_res = query_ollama("gemma4-nomos", plan_messages, temperature=0)
         plan_content = plan_res["message"]["content"]
         print(plan_content)
@@ -301,7 +322,7 @@ def main():
     parser = argparse.ArgumentParser(description="Nomos: Profile-based Workspace Agent Runtime")
     
     # Check if we should use the new task-centric CLI or compatibility mode
-    if len(sys.argv) > 1 and sys.argv[1] not in ["ask", "list", "build", "-h", "--help"]:
+    if len(sys.argv) > 1 and sys.argv[1] not in ["ask", "list", "build", "index", "-h", "--help"]:
         # New task-centric CLI (but also used for legacy if no flags)
         parser.add_argument("task", help="Task to execute")
         parser.add_argument("--workspace", default=os.getcwd(), help="Workspace directory")
@@ -320,6 +341,10 @@ def main():
         
         subparsers.add_parser("list")
         subparsers.add_parser("build")
+        
+        index_parser = subparsers.add_parser("index")
+        index_parser.add_argument("--workspace", default=os.getcwd(), help="Workspace directory")
+        index_parser.add_argument("--reset", action="store_true", help="Clear existing index and start fresh")
 
         args = parser.parse_args()
 
@@ -338,6 +363,27 @@ def main():
         elif args.command == "build":
             print("--- Building Models ---", file=sys.stderr)
             subprocess.run([os.path.join(BASE_DIR, "build.sh")], shell=False, check=True)
+        elif args.command == "index":
+            try:
+                from nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+                workspace = os.path.abspath(os.path.expanduser(args.workspace))
+                db_path = os.path.join(workspace, STATE_DIR_NAME, "vector_store")
+                
+                if args.reset and os.path.exists(db_path):
+                    print(f"--- Resetting Index: {db_path} ---", file=sys.stderr)
+                    import shutil
+                    shutil.rmtree(db_path)
+                
+                os.makedirs(db_path, exist_ok=True)
+                
+                print(f"--- Indexing Workspace: {workspace} ---", file=sys.stderr)
+                embedder = OllamaEmbeddingProvider()
+                store = LanceDBProvider(db_path)
+                manager = RAGManager(workspace, embedder, store)
+                manager.index_workspace()
+                print("Index complete.")
+            except ImportError:
+                print("Error: lancedb or dependencies not installed. RAG indexing failed.", file=sys.stderr)
         else:
             parser.print_help()
 
