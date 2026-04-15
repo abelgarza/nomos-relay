@@ -95,6 +95,23 @@ class Runtime:
         """Orchestrates the autonomous engineering loop using Overlord and Kanban."""
         from nomos_relay.nomos_kanban import NomosKanban
         from nomos_relay.nomos_overlord import NomosOverlord
+        import signal
+        
+        # Flag to track if user requested shutdown
+        shutdown_requested = False
+        
+        def signal_handler(sig, frame):
+            nonlocal shutdown_requested
+            if not shutdown_requested:
+                print(f"\n[!] Shutdown requested by user (Ctrl+C). Finishing current task before exiting...", file=sys.stderr)
+                shutdown_requested = True
+            else:
+                print(f"\n[!] Forcing immediate exit.", file=sys.stderr)
+                sys.exit(1)
+                
+        # Register the signal handler for SIGINT
+        original_sigint_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal_handler)
         
         db_path = os.path.join(self.workspace, STATE_DIR_NAME, "vector_store")
         os.makedirs(db_path, exist_ok=True)
@@ -102,56 +119,87 @@ class Runtime:
         kanban = NomosKanban(db_path)
         overlord = NomosOverlord()
         
-        # 1. Initialize Board if empty
-        board = kanban.get_full_board()
-        if not board:
-            print(f"--- Overlord Initializing Kanban ---", file=sys.stderr)
-            tasks = overlord.analyze_and_plan(objective)
-            if not tasks:
-                print("Error: Overlord failed to generate tasks.", file=sys.stderr)
-                return
-            kanban.init_board(objective, tasks)
-            print(f"Backlog created: {len(tasks)} tasks.")
-
-        # 2. Loop until complete or limit reached
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            # Refresh Kanban instance to ensure fresh disk state
-            kanban = NomosKanban(db_path)
-            task = kanban.get_next_task()
-            
-            if not task:
-                # print(f"[DEBUG] No task found in iteration {iteration}", file=sys.stderr)
-                if kanban.is_complete():
-                    print(f"\n--- MISSION COMPLETE ---", file=sys.stderr)
+        try:
+            # 1. Initialize Board if empty
+            board = kanban.get_full_board()
+            if not board:
+                print(f"--- Overlord Initializing Kanban ---", file=sys.stderr)
+                
+                # Reconnaissance: Capture basic workspace structure for context
+                env_context = ""
+                try:
+                    # Use a simple ls -F if tree is not available, avoiding .git/.nomos
+                    ls_output = subprocess.check_output(
+                        "find . -maxdepth 2 -not -path '*/.*' | sort", 
+                        shell=True, cwd=self.workspace, text=True
+                    )
+                    env_context = f"\nWORKSPACE ENVIRONMENT (Files/Dirs):\n{ls_output.strip()}\n"
+                except Exception as e:
+                    env_context = f"\n(Workspace enumeration failed: {e})\n"
+    
+                enhanced_objective = objective + env_context
+    
+                tasks = overlord.analyze_and_plan(enhanced_objective)
+                if not tasks:
+                    print("Error: Overlord failed to generate tasks.", file=sys.stderr)
+                    return
+                kanban.init_board(objective, tasks)
+                print(f"Backlog created: {len(tasks)} tasks.")
+    
+            # 2. Loop until complete or limit reached
+            iteration = 0
+            while iteration < max_iterations:
+                if shutdown_requested:
+                    print(f"\n--- AUTOPILOT PAUSED (State saved in Kanban) ---", file=sys.stderr)
+                    break
+                    
+                iteration += 1
+                # Refresh Kanban instance to ensure fresh disk state
+                kanban = NomosKanban(db_path)
+                task = kanban.get_next_task()
+                
+                if not task:
+                    # print(f"[DEBUG] No task found in iteration {iteration}", file=sys.stderr)
+                    if kanban.is_complete():
+                        print(f"\n--- MISSION COMPLETE ---", file=sys.stderr)
+                    else:
+                        print(f"\n--- PROJECT BLOCKED ---", file=sys.stderr)
+                    break
+                
+                print(f"\n[Iteration {iteration}] Executing Task: {task['description']}", file=sys.stderr)
+                
+                # Build specific task prompt
+                full_task_context = f"OBJECTIVE: {objective}\nCURRENT TASK: {task['description']}\nGOAL: Complete the current task while keeping the overall objective in mind."
+                
+                # Execute one step
+                # Note: We use execute=True forced in auto-mode to allow the agent to actually work
+                self.execute = True 
+                success, result_msg = self.run_task(full_task_context)
+                
+                if success:
+                    kanban.update_task_state(task['id'], "done", "Success")
                 else:
-                    print(f"\n--- PROJECT BLOCKED ---", file=sys.stderr)
-                break
-            
-            print(f"\n[Iteration {iteration}] Executing Task: {task['description']}", file=sys.stderr)
-            
-            # Build specific task prompt
-            full_task_context = f"OBJECTIVE: {objective}\nCURRENT TASK: {task['description']}\nGOAL: Complete the current task while keeping the overall objective in mind."
-            
-            # Execute one step
-            # Note: We use execute=True forced in auto-mode to allow the agent to actually work
-            self.execute = True 
-            self.run_task(full_task_context)
-            
-            # For simplicity in this first version, we mark as done after one attempt
-            # A real version would check exit codes or run a verification command
-            kanban.update_task_state(task['id'], "done", "Executed")
-            
-            # Re-index workspace after each successful task to keep RAG fresh
-            try:
-                from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
-                embedder = OllamaEmbeddingProvider()
-                store = LanceDBProvider(db_path)
-                manager = RAGManager(self.workspace, embedder, store)
-                manager.index_workspace()
-            except:
-                pass
+                    attempts = task.get('attempts', 0) + 1
+                    if attempts >= 3:
+                        print(f"[!] Task failed 3 times. Blocking.", file=sys.stderr)
+                        kanban.update_task_state(task['id'], "blocked", result_msg, increment_attempts=True)
+                    else:
+                        print(f"[!] Task failed (Attempt {attempts}). Keeping in doing state.", file=sys.stderr)
+                        kanban.update_task_state(task['id'], "doing", result_msg, increment_attempts=True)
+                        # Next iteration will pick this up again, hopefully with context of why it failed.
+                
+                # Re-index workspace after each successful task to keep RAG fresh
+                try:
+                    from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+                    embedder = OllamaEmbeddingProvider()
+                    store = LanceDBProvider(db_path)
+                    manager = RAGManager(self.workspace, embedder, store)
+                    manager.index_workspace()
+                except:
+                    pass
+        finally:
+            # Restore original handler when exiting loop
+            signal.signal(signal.SIGINT, original_sigint_handler)
 
     def log(self, log_type, content):
         nomos_dir = os.path.join(self.workspace, STATE_DIR_NAME)
@@ -345,13 +393,13 @@ class Runtime:
                     msg = f"BLOCKED: {reason}"
                     print(f"\n--- {msg} ---", file=sys.stderr)
                     self.log("journal", f"Task: {task} | Command: {cmd} | Result: {msg}")
-                    return
+                    return False, msg
 
                 if is_mutation and not self.execute:
                     msg = "DRY RUN: Mutation blocked. Use --execute to run."
                     print(f"\n--- {msg} ---", file=sys.stderr)
                     self.log("journal", f"Task: {task} | Command: {cmd} | Result: {msg}")
-                    return
+                    return False, msg
 
                 print(f"\n--- Executing: {cmd} ---", file=sys.stderr)
                 try:
@@ -371,17 +419,24 @@ class Runtime:
                         if result.stdout:
                             print(result.stdout)
                         self.log("journal", f"Task: {task} | Command: {cmd} | Status: Success")
+                        return True, result.stdout
                     else:
                         print(result.stderr, file=sys.stderr)
-                        self.log("journal", f"Task: {task} | Command: {cmd} | Status: Failed (code {result.returncode})")
+                        self.log("journal", f"Task: {task} | Command: {cmd} | Status: Failed (code {result.returncode}) | Error: {result.stderr}")
+                        return False, result.stderr
                 except Exception as e:
                     print(f"Execution error: {e}", file=sys.stderr)
                     self.log("journal", f"Task: {task} | Command: {cmd} | Status: Error ({e})")
+                    return False, str(e)
             else:
-                self.log("journal", f"Task: {task} | No command generated")
+                msg = "No command generated"
+                self.log("journal", f"Task: {task} | {msg}")
+                return False, msg
 
         except json.JSONDecodeError:
-            print(f"Failed to parse relay JSON: {relay_content}", file=sys.stderr)
+            msg = f"Failed to parse relay JSON: {relay_content}"
+            print(msg, file=sys.stderr)
+            return False, msg
 
 def main():
     parser = argparse.ArgumentParser(description="Nomos: Profile-based Workspace Agent Runtime")
