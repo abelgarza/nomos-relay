@@ -1,4 +1,14 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.env
+.venv*
+
+# Nomos State
 .nomos/
 *.log
 last_plan.txt
