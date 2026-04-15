@@ -16,7 +16,11 @@ class EmbeddingProvider(ABC):
 
 class VectorStoreProvider(ABC):
     @abstractmethod
-    def add_documents(self, documents: List[Dict[str, Any]]):
+    def add_documents(self, documents: List[Dict[str, Any]], mode: str = "overwrite"):
+        pass
+
+    @abstractmethod
+    def delete_by_file(self, filename: str):
         pass
 
     @abstractmethod
@@ -39,7 +43,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             response.raise_for_status()
             return response.json()["embedding"]
         except Exception as e:
-            print(f"Embedding error: {e}")
+            # print(f"Embedding error: {e}")
             return []
 
 class LanceDBProvider(VectorStoreProvider):
@@ -47,14 +51,28 @@ class LanceDBProvider(VectorStoreProvider):
         self.db = lancedb.connect(db_path)
         self.table_name = table_name
 
-    def add_documents(self, documents: List[Dict[str, Any]]):
+    def add_documents(self, documents: List[Dict[str, Any]], mode: str = "overwrite"):
         if not documents:
             return
         
         df = pd.DataFrame(documents)
-        # We use mode="overwrite" to ensure a clean re-index and avoid duplicates
-        # This aligns with the "Nomos" philosophy of deterministic state.
-        self.db.create_table(self.table_name, data=df, mode="overwrite")
+        if self.table_name not in self.db.list_tables():
+            self.db.create_table(self.table_name, data=df)
+        else:
+            table = self.db.open_table(self.table_name)
+            if mode == "overwrite":
+                self.db.create_table(self.table_name, data=df, mode="overwrite")
+            else:
+                table.add(df)
+
+    def delete_by_file(self, filename: str):
+        if self.table_name not in self.db.list_tables():
+            return
+        table = self.db.open_table(self.table_name)
+        # LanceDB uses SQL-like filters for deletion
+        # Metadata is stored as a JSON string in our implementation
+        # This is a bit tricky with raw JSON strings, so we filter by containment
+        table.delete(f"metadata LIKE '%\"file\": \"{filename}\"%'")
 
     def search(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
         if self.table_name not in self.db.list_tables():
@@ -71,52 +89,91 @@ class RAGManager:
         self.workspace_path = workspace_path
         self.embedder = embedding_provider
         self.store = vector_store
+        self.manifest_path = os.path.join(workspace_path, ".nomos", "rag_manifest.json")
 
-    def index_workspace(self, extensions=(".py", ".js", ".json", ".md", ".sh")):
+    def _load_manifest(self) -> Dict[str, float]:
+        if os.path.exists(self.manifest_path):
+            try:
+                with open(self.manifest_path, "r") as f:
+                    return json.load(f)
+            except:
+                pass
+        return {}
+
+    def _save_manifest(self, manifest: Dict[str, float]):
+        os.makedirs(os.path.dirname(self.manifest_path), exist_ok=True)
+        with open(self.manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+
+    def index_workspace(self, extensions=(".py", ".js", ".json", ".md", ".sh", ".go", ".rs"), reset=False):
+        manifest = {} if reset else self._load_manifest()
+        new_manifest = manifest.copy()
+        
         documents = []
+        files_to_update = []
+
         for root, _, files in os.walk(self.workspace_path):
-            if ".git" in root or ".nomos" in root or "__pycache__" in root:
+            if ".git" in root or ".nomos" in root or "__pycache__" in root or "node_modules" in root:
                 continue
             
             for file in files:
                 if file.endswith(extensions):
                     path = os.path.join(root, file)
-                    try:
-                        with open(path, "r", encoding="utf-8") as f:
-                            content = f.read()
-                            if not content.strip():
-                                continue
-                            
-                            # Improved chunking by lines with overlap
-                            lines = content.split('\n')
-                            chunks = []
-                            chunk_size = 50  # lines
-                            overlap = 10
-                            
-                            for i in range(0, len(lines), chunk_size - overlap):
-                                chunk_lines = lines[i:i + chunk_size]
-                                chunk_text = '\n'.join(chunk_lines)
-                                if len(chunk_text.strip()) > 10:
-                                    chunks.append(chunk_text)
-                            
-                            for i, chunk in enumerate(chunks):
-                                print(f"Indexing {file} [chunk {i}]...")
-                                vector = self.embedder.get_embedding(chunk)
-                                if vector:
-                                    documents.append({
-                                        "vector": vector,
-                                        "text": chunk,
-                                        "metadata": json.dumps({
-                                            "file": os.path.relpath(path, self.workspace_path),
-                                            "chunk": i
-                                        })
-                                    })
-                    except Exception as e:
-                        print(f"Error reading {path}: {e}")
-        
+                    rel_path = os.path.relpath(path, self.workspace_path)
+                    mtime = os.path.getmtime(path)
+                    
+                    if reset or rel_path not in manifest or manifest[rel_path] < mtime:
+                        files_to_update.append((path, rel_path, mtime))
+
+        if not files_to_update:
+            return
+
+        print(f"Incremental Indexing: {len(files_to_update)} files changed.")
+
+        for path, rel_path, mtime in files_to_update:
+            try:
+                # If not resetting, remove old vectors for this file before adding new ones
+                if not reset:
+                    self.store.delete_by_file(rel_path)
+                
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    if not content.strip():
+                        continue
+                    
+                    # Improved chunking by lines with overlap
+                    lines = content.split('\n')
+                    chunks = []
+                    chunk_size = 50  # lines
+                    overlap = 10
+                    
+                    for i in range(0, len(lines), chunk_size - overlap):
+                        chunk_lines = lines[i:i + chunk_size]
+                        chunk_text = '\n'.join(chunk_lines)
+                        if len(chunk_text.strip()) > 10:
+                            chunks.append(chunk_text)
+                    
+                    for i, chunk in enumerate(chunks):
+                        # print(f"Indexing {rel_path} [chunk {i}]...")
+                        vector = self.embedder.get_embedding(chunk)
+                        if vector:
+                            documents.append({
+                                "vector": vector,
+                                "text": chunk,
+                                "metadata": json.dumps({
+                                    "file": rel_path,
+                                    "chunk": i
+                                })
+                            })
+                new_manifest[rel_path] = mtime
+            except Exception as e:
+                print(f"Error indexing {rel_path}: {e}")
+
         if documents:
-            self.store.add_documents(documents)
-            print(f"Indexed {len(documents)} chunks.")
+            mode = "overwrite" if reset else "append"
+            self.store.add_documents(documents, mode=mode)
+            self._save_manifest(new_manifest)
+            print(f"Indexed {len(documents)} new chunks.")
 
     def _normalize_query(self, text: str) -> str:
         """Translates the query to English using the local gemma4-nomos model if necessary."""

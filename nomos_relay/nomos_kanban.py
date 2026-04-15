@@ -4,8 +4,9 @@ import sys
 from typing import List, Dict, Any, Optional
 
 class NomosKanban:
-    def __init__(self, db_path: str, file_name: str = "kanban.json"):
+    def __init__(self, db_path: str, file_name: str = "kanban.json", context_name: str = "project_context.json"):
         self.path = os.path.join(db_path, file_name)
+        self.context_path = os.path.join(db_path, context_name)
         os.makedirs(db_path, exist_ok=True)
 
     def _save(self, data: List[Dict[str, Any]]):
@@ -20,6 +21,21 @@ class NomosKanban:
                 return json.load(f)
         except:
             return []
+
+    def save_context(self, context: Dict[str, Any]):
+        """Persists high-level project decisions and context."""
+        with open(self.context_path, "w", encoding="utf-8") as f:
+            json.dump(context, f, indent=2)
+
+    def load_context(self) -> Dict[str, Any]:
+        """Loads persistent project decisions."""
+        if not os.path.exists(self.context_path):
+            return {}
+        try:
+            with open(self.context_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
 
     def init_board(self, objective: str, tasks: List[str]):
         """Initializes the board with an objective and a list of atomic tasks."""

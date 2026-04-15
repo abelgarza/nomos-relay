@@ -9,24 +9,37 @@ class NomosOverlord:
         self.model = model
         self.url = "http://localhost:11434/api/chat"
 
-    def analyze_and_plan(self, objective: str, journal_tail: str = "") -> List[str]:
-        """Analyzes the objective and audit logs to generate a list of atomic technical tasks."""
+    def analyze_and_plan(self, objective: str, journal_tail: str = "", current_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Analyzes objective and context to generate tasks and update project decisions."""
         
-        prompt = f"""You are the NOMOS OVERLORD. Your goal is to break down a high-level objective into a strict, sequential list of atomic, verifiable technical tasks for an agent.
+        context_str = json.dumps(current_context or {}, indent=2)
+        
+        prompt = f"""You are the NOMOS OVERLORD. Break down the objective into sequential, atomic, technical tasks.
+You MUST maintain consistency with existing project decisions.
 
 OBJECTIVE:
 {objective}
 
-RECENT JOURNAL LOGS:
+EXISTING PROJECT CONTEXT:
+{context_str}
+
+RECENT LOGS:
 {journal_tail}
 
 CONSTRAINTS:
-- Tasks must be atomic (one action per task).
-- Tasks must be technical (e.g., "Create directory X", "Write math logic in Y", "Run tests in Z").
-- Output ONLY a JSON array of strings. No prose, no headings.
+- Tasks must be atomic and technical.
+- Identify the Tech Stack (Language, Frameworks) and save it in 'updated_context'.
+- Output ONLY valid JSON.
 
 Output format:
-["Task 1", "Task 2", "Task 3"]
+{{
+  "updated_context": {{
+    "tech_stack": "e.g. Go (Bubble Tea)",
+    "architecture": "e.g. MVC",
+    "decisions": ["decision 1", "decision 2"]
+  }},
+  "tasks": ["Task 1", "Task 2"]
+}}
 """
         try:
             response = requests.post(self.url, json={
@@ -38,17 +51,17 @@ Output format:
             response.raise_for_status()
             content = response.json()["message"]["content"].strip()
             
-            # Extract JSON if the model included extra text
-            if "[" in content and "]" in content:
-                content = content[content.find("["):content.rfind("]")+1]
+            if "{" in content and "}" in content:
+                content = content[content.find("{"):content.rfind("}")+1]
             
-            tasks = json.loads(content)
-            if isinstance(tasks, list):
-                return tasks
-            return []
+            result = json.loads(content)
+            return {
+                "tasks": result.get("tasks", []),
+                "context": result.get("updated_context", current_context or {})
+            }
         except Exception as e:
             print(f"Overlord Error: {e}", file=sys.stderr)
-            return []
+            return {"tasks": [], "context": current_context or {}}
 
 if __name__ == "__main__":
     overlord = NomosOverlord()

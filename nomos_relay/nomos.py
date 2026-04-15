@@ -95,6 +95,7 @@ class Runtime:
         """Orchestrates the autonomous engineering loop using Overlord and Kanban."""
         from nomos_relay.nomos_kanban import NomosKanban
         from nomos_relay.nomos_overlord import NomosOverlord
+        from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
         import signal
         
         # Flag to track if user requested shutdown
@@ -119,33 +120,38 @@ class Runtime:
         kanban = NomosKanban(db_path)
         overlord = NomosOverlord()
         
+        # Incremental RAG Setup
+        embedder = OllamaEmbeddingProvider()
+        store = LanceDBProvider(db_path)
+        rag = RAGManager(self.workspace, embedder, store)
+
         try:
-            # 1. Initialize Board if empty
+            # 0. Reconnaissance: Capture basic workspace structure
+            env_context = ""
+            try:
+                ls_output = subprocess.check_output(
+                    "find . -maxdepth 2 -not -path '*/.*' | sort", 
+                    shell=True, cwd=self.workspace, text=True
+                )
+                env_context = f"\nWORKSPACE ENVIRONMENT (Files/Dirs):\n{ls_output.strip()}\n"
+            except:
+                pass
+
+            # 1. Initialize or Resume Board
             board = kanban.get_full_board()
-            if not board:
-                print(f"--- Overlord Initializing Kanban ---", file=sys.stderr)
-                
-                # Reconnaissance: Capture basic workspace structure for context
-                env_context = ""
-                try:
-                    # Use a simple ls -F if tree is not available, avoiding .git/.nomos
-                    ls_output = subprocess.check_output(
-                        "find . -maxdepth 2 -not -path '*/.*' | sort", 
-                        shell=True, cwd=self.workspace, text=True
-                    )
-                    env_context = f"\nWORKSPACE ENVIRONMENT (Files/Dirs):\n{ls_output.strip()}\n"
-                except Exception as e:
-                    env_context = f"\n(Workspace enumeration failed: {e})\n"
-    
-                enhanced_objective = objective + env_context
-    
-                tasks = overlord.analyze_and_plan(enhanced_objective)
-                if not tasks:
-                    print("Error: Overlord failed to generate tasks.", file=sys.stderr)
-                    return
-                kanban.init_board(objective, tasks)
-                print(f"Backlog created: {len(tasks)} tasks.")
-    
+            project_context = kanban.load_context()
+
+            if not board or project_context == {}:
+                print(f"--- Overlord Initializing Project ---", file=sys.stderr)
+                result = overlord.analyze_and_plan(objective + env_context, current_context=project_context)
+                kanban.init_board(objective, result["tasks"])
+                kanban.save_context(result["context"])
+                project_context = result["context"]
+                print(f"Project context saved: {project_context.get('tech_stack', 'Unknown')}")
+                print(f"Backlog created: {len(result['tasks'])} tasks.")
+            else:
+                print(f"--- Overlord Resuming Project: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
+
             # 2. Loop until complete or limit reached
             iteration = 0
             while iteration < max_iterations:
@@ -154,12 +160,13 @@ class Runtime:
                     break
                     
                 iteration += 1
-                # Refresh Kanban instance to ensure fresh disk state
-                kanban = NomosKanban(db_path)
+                # Sync RAG before every task
+                rag.index_workspace()
+                
+                # Fetch task
                 task = kanban.get_next_task()
                 
                 if not task:
-                    # print(f"[DEBUG] No task found in iteration {iteration}", file=sys.stderr)
                     if kanban.is_complete():
                         print(f"\n--- MISSION COMPLETE ---", file=sys.stderr)
                     else:
@@ -168,11 +175,10 @@ class Runtime:
                 
                 print(f"\n[Iteration {iteration}] Executing Task: {task['description']}", file=sys.stderr)
                 
-                # Build specific task prompt
-                full_task_context = f"OBJECTIVE: {objective}\nCURRENT TASK: {task['description']}\nGOAL: Complete the current task while keeping the overall objective in mind."
+                # Build context-aware prompt
+                full_task_context = f"OBJECTIVE: {objective}\nPROJECT CONTEXT: {json.dumps(project_context)}\nCURRENT TASK: {task['description']}\nGOAL: Complete the task staying true to the project stack and decisions."
                 
                 # Execute one step
-                # Note: We use execute=True forced in auto-mode to allow the agent to actually work
                 self.execute = True 
                 success, result_msg = self.run_task(full_task_context)
                 
@@ -184,19 +190,9 @@ class Runtime:
                         print(f"[!] Task failed 3 times. Blocking.", file=sys.stderr)
                         kanban.update_task_state(task['id'], "blocked", result_msg, increment_attempts=True)
                     else:
-                        print(f"[!] Task failed (Attempt {attempts}). Keeping in doing state.", file=sys.stderr)
+                        print(f"[!] Task failed (Attempt {attempts}). Re-evaluating strategy...", file=sys.stderr)
                         kanban.update_task_state(task['id'], "doing", result_msg, increment_attempts=True)
-                        # Next iteration will pick this up again, hopefully with context of why it failed.
-                
-                # Re-index workspace after each successful task to keep RAG fresh
-                try:
-                    from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
-                    embedder = OllamaEmbeddingProvider()
-                    store = LanceDBProvider(db_path)
-                    manager = RAGManager(self.workspace, embedder, store)
-                    manager.index_workspace()
-                except:
-                    pass
+
         finally:
             # Restore original handler when exiting loop
             signal.signal(signal.SIGINT, original_sigint_handler)
