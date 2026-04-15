@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 class NomosOverlord:
     def __init__(self, model: str = "gemma4-nomos-overlord"):
         self.model = model
-        self.url = "http://localhost:11434/api/chat"
+        self.url = "http://127.0.0.1:11434/api/chat"
 
     def analyze_and_plan(self, objective: str, journal_tail: str = "", current_context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Analyzes objective and context to generate tasks and update project decisions."""

@@ -10,14 +10,14 @@ import shlex
 import os
 from datetime import datetime
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 STATE_DIR_NAME = ".nomos"
 # BASE_DIR should be the project root, not the package subdir
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_PATH = os.path.join(BASE_DIR, "nomos_relay", "api", "relay.schema.json")
 
 # Default security settings
-DEFAULT_DANGEROUS_OPS = [">", ">>", "|", "&", ";", "`", "$("]
+DEFAULT_DANGEROUS_OPS = ["|", ";", "`", "$("]
 DEFAULT_DENYLIST = [
     "rm", "mv", "chmod", "chown", "sudo", "curl", "wget", 
     "ssh", "scp", "dd", "mkfs", "reboot", "shutdown"
@@ -46,8 +46,8 @@ PROFILES = {
     "developer": Profile(
         "developer",
         allow_mutation=True,
-        mutating_allowlist=["mkdir", "touch", "git", "python3", "python", "node", "npm", "pip"],
-        read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git", "ls -R"]
+        mutating_allowlist=["mkdir", "touch", "git", "python3", "python", "node", "npm", "pip", "go"],
+        read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git", "ls -R", "go"]
     )
 }
 
@@ -251,45 +251,58 @@ class Runtime:
         if not cmd_parts:
             return True, "", False
 
-        primary_cmd = cmd_parts[0]
-
-        # 3. Denylist Check
-        if primary_cmd in DEFAULT_DENYLIST:
-            return False, f"Command '{primary_cmd}' is in denylist", False
+        # 3. Denylist Check (Check ALL words)
+        for part in cmd_parts:
+            if part in DEFAULT_DENYLIST:
+                return False, f"Command '{part}' is in denylist", False
 
         # 4. Workspace Root Check (Profile-based Jail)
         if self.profile.workspace_root:
             if not is_within_path(self.workspace, self.profile.workspace_root):
                 return False, f"Workspace {self.workspace} is not within profile root {self.profile.workspace_root}", False
 
-        # 5. Mutation Policy
+        # 5. Mutation Policy and Allowlist Check
         is_mutation = False
+        operators = ["&&", "||", ">", ">>", "<", "<<"]
         
-        # If it's in mutating allowlist but NOT in read-only, it's definitely a mutation
-        if primary_cmd in self.profile.mutating_allowlist and primary_cmd not in self.profile.read_only_allowlist:
-            is_mutation = True
+        # We need to identify commands in the sequence
+        for i, part in enumerate(cmd_parts):
+            if i == 0 or (i > 0 and cmd_parts[i-1] in ["&&", "||", ";", "|"]):
+                if part in operators:
+                    continue
+                
+                # Check this specific command part
+                # If it's in mutating allowlist but NOT in read-only, it's definitely a mutation
+                if part in self.profile.mutating_allowlist and part not in self.profile.read_only_allowlist:
+                    is_mutation = True
 
-        # git is special
-        if primary_cmd == "git":
-            mutating_git = ["init", "add", "commit", "branch", "checkout", "tag", "rm", "mv"]
-            if any(arg in cmd_parts for arg in mutating_git):
-                is_mutation = True
+                # git is special
+                if part == "git":
+                    mutating_git = ["init", "add", "commit", "branch", "checkout", "tag", "rm", "mv"]
+                    if any(arg in cmd_parts[i:] for arg in mutating_git):
+                        is_mutation = True
 
-        if is_mutation:
-            if not self.profile.allow_mutation:
-                return False, f"Mutations are not allowed in profile '{self.profile.name}'", True
-            
-            if primary_cmd not in self.profile.mutating_allowlist:
-                return False, f"Command '{primary_cmd}' is not in mutation allowlist for profile '{self.profile.name}'", True
-        else:
-            if primary_cmd not in self.profile.read_only_allowlist:
-                return False, f"Command '{primary_cmd}' is not in read-only allowlist for profile '{self.profile.name}'", False
+                if is_mutation:
+                    if not self.profile.allow_mutation:
+                        return False, f"Mutations are not allowed in profile '{self.profile.name}'", True
+                    
+                    if part not in self.profile.mutating_allowlist:
+                        return False, f"Command '{part}' is not in mutation allowlist for profile '{self.profile.name}'", True
+                else:
+                    if part not in self.profile.read_only_allowlist:
+                        return False, f"Command '{part}' is not in read-only allowlist for profile '{self.profile.name}'", False
 
         # 6. Deep Flag Check
-        if primary_cmd == "find":
+        if "find" in cmd_parts:
             forbidden_find = ["-delete", "-exec", "-ok"]
             if any(arg in cmd_parts for arg in forbidden_find):
                 return False, "Forbidden 'find' flags detected", is_mutation
+
+        # Check for redirection mutations
+        if ">" in cmd_parts or ">>" in cmd_parts:
+            is_mutation = True
+            if not self.profile.allow_mutation:
+                return False, "File redirection is a mutation and is not allowed in this profile", True
 
         return True, "", is_mutation
 
@@ -403,13 +416,10 @@ class Runtime:
 
                 print(f"\n--- Executing: {cmd} ---", file=sys.stderr)
                 try:
-                    cmd_parts = shlex.split(cmd)
-                    expanded_parts = [os.path.expanduser(os.path.expandvars(p)) for p in cmd_parts]
-                    
-                    # Execute in workspace
+                    # Execute in workspace using shell=True to support operators
                     result = subprocess.run(
-                        expanded_parts, 
-                        shell=False, 
+                        cmd, 
+                        shell=True, 
                         capture_output=True, 
                         text=True, 
                         cwd=self.workspace

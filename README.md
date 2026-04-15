@@ -62,7 +62,7 @@ nomos "Build a full TUI dashboard based on README.md" --auto --profile developer
 **In this mode, Nomos will:**
 1.  **Recon:** Scan the environment to detect the language (Go, Python, etc).
 2.  **Plan:** Overlord creates a Kanban board in `.nomos/kanban.json`.
-3.  **Branch:** If a Git repo is detected, it moves to a safe `.nomos` branch.
+3.  **Branch:** If a Git repo is detected, it moves to a safe `nomos-auto` branch.
 4.  **Execute:** Iterates through tasks, updating its memory (RAG) after each step.
 5.  **Commit:** Automatically commits successful tasks using the Git Agent.
 
@@ -106,7 +106,7 @@ Nomos enforces strict "Fail-Closed" governance through profiles:
 
 - **`read-only`**: (Default) Discovery only. No filesystem mutations allowed.
 - **`repo-safe`**: Allows `git`, `mkdir`, and `touch`. Safe for repo management.
-- **`developer`**: Full engineering access. Can use `pip`, `npm`, `python`, etc.
+- **`developer`**: Full engineering access. Can use `pip`, `npm`, `python`, `go`, etc. Supports safe shell operators like `>` and `&&`.
 
 Every command is validated against a global `DENYLIST` to prevent system-level damage.
 

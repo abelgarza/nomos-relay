@@ -30,7 +30,7 @@ class VectorStoreProvider(ABC):
 # --- Implementaciones ---
 
 class OllamaEmbeddingProvider(EmbeddingProvider):
-    def __init__(self, model: str = "nomic-embed-text", url: str = "http://localhost:11434/api/embeddings"):
+    def __init__(self, model: str = "nomic-embed-text", url: str = "http://127.0.0.1:11434/api/embeddings"):
         self.model = model
         self.url = url
 
@@ -56,7 +56,7 @@ class LanceDBProvider(VectorStoreProvider):
             return
         
         df = pd.DataFrame(documents)
-        if self.table_name not in self.db.list_tables():
+        if self.table_name not in self.db.table_names():
             self.db.create_table(self.table_name, data=df)
         else:
             table = self.db.open_table(self.table_name)
@@ -66,7 +66,7 @@ class LanceDBProvider(VectorStoreProvider):
                 table.add(df)
 
     def delete_by_file(self, filename: str):
-        if self.table_name not in self.db.list_tables():
+        if self.table_name not in self.db.table_names():
             return
         table = self.db.open_table(self.table_name)
         # LanceDB uses SQL-like filters for deletion
@@ -75,7 +75,7 @@ class LanceDBProvider(VectorStoreProvider):
         table.delete(f"metadata LIKE '%\"file\": \"{filename}\"%'")
 
     def search(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-        if self.table_name not in self.db.list_tables():
+        if self.table_name not in self.db.table_names():
             return []
         
         table = self.db.open_table(self.table_name)
@@ -180,7 +180,7 @@ class RAGManager:
         try:
             # We use a very strict prompt to avoid conversational filler
             prompt = f"Translate the following technical query to English. If it is already in English, output it exactly as is. Output ONLY the translation, no quotes, no explanations, no filler:\n\n{text}"
-            response = requests.post("http://localhost:11434/api/chat", json={
+            response = requests.post("http://127.0.0.1:11434/api/chat", json={
                 "model": "gemma4-nomos",
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,

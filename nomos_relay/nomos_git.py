@@ -9,7 +9,7 @@ class NomosGitController:
     def __init__(self, workspace: str, model: str = "gemma4-nomos-git"):
         self.workspace = workspace
         self.model = model
-        self.url = "http://localhost:11434/api/chat"
+        self.url = "http://127.0.0.1:11434/api/chat"
 
     def is_git_repo(self) -> bool:
         return os.path.exists(os.path.join(self.workspace, ".git"))
