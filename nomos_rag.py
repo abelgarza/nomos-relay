@@ -57,7 +57,7 @@ class LanceDBProvider(VectorStoreProvider):
         self.db.create_table(self.table_name, data=df, mode="overwrite")
 
     def search(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
-        if self.table_name not in self.db.table_names():
+        if self.table_name not in self.db.list_tables():
             return []
         
         table = self.db.open_table(self.table_name)
