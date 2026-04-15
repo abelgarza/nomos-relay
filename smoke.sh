@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NOMOS="$DIR/nomos.py"
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+NOMOS="/home/abelg/dev/personal/.venv_py314/bin/nomos"
 
 echo "== nomos: workspace tests =="
 

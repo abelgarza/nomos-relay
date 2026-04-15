@@ -1,3 +1,20 @@
+Metadata-Version: 2.4
+Name: nomos-relay
+Version: 1.6.1
+Summary: A cybernetic orchestration framework for local AI agents.
+Author: Abel Garza Ramírez
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: lancedb
+Requires-Dist: pandas
+Requires-Dist: requests
+Requires-Dist: pyarrow
+Dynamic: license-file
+
 # Nomos Relay
 
 <p align="center">

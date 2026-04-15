@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-import nomos
+from nomos_relay import nomos
 import json
 import os
 
@@ -14,7 +14,7 @@ def test_missing_keys_blocks_execution(tmp_path):
             return {"message": {"content": '{"goal":"test", "command":"ls"}'}}
         return {"message": {"content": "mock plan"}}
 
-    with patch('nomos.query_ollama', side_effect=mock_query):
+    with patch('nomos_relay.nomos.query_ollama', side_effect=mock_query):
         runtime = nomos.Runtime(str(workspace), profile_name="read-only")
         # run_task prints BLOCKED to stderr/stdout
         runtime.run_task("test missing keys")
@@ -35,7 +35,7 @@ def test_typed_malformed_blocks_execution(tmp_path):
             return {"message": {"content": '{"goal":"test", "constraints":"not-a-list", "result":"ok", "uncertainty":"none", "next":"none", "command":"ls"}'}}
         return {"message": {"content": "mock plan"}}
 
-    with patch('nomos.query_ollama', side_effect=mock_query):
+    with patch('nomos_relay.nomos.query_ollama', side_effect=mock_query):
         runtime = nomos.Runtime(str(workspace), profile_name="read-only")
         runtime.run_task("test mistyped relay")
         

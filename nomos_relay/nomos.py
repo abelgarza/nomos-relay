@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import json
 import requests
+import json
 import sys
 import argparse
+import os
 import subprocess
 import shlex
 import os
@@ -87,6 +89,65 @@ class Runtime:
         # Ensure workspace exists
         if not os.path.exists(self.workspace):
             os.makedirs(self.workspace, exist_ok=True)
+
+    def run_autonomous_loop(self, objective, max_iterations=10):
+        """Orchestrates the autonomous engineering loop using Overlord and Kanban."""
+        from nomos_relay.nomos_kanban import NomosKanban
+        from nomos_relay.nomos_overlord import NomosOverlord
+        
+        db_path = os.path.join(self.workspace, STATE_DIR_NAME, "vector_store")
+        os.makedirs(db_path, exist_ok=True)
+        
+        kanban = NomosKanban(db_path)
+        overlord = NomosOverlord()
+        
+        # 1. Initialize Board if empty
+        board = kanban.get_full_board()
+        if not board:
+            print(f"--- Overlord Initializing Kanban ---", file=sys.stderr)
+            tasks = overlord.analyze_and_plan(objective)
+            if not tasks:
+                print("Error: Overlord failed to generate tasks.", file=sys.stderr)
+                return
+            kanban.init_board(objective, tasks)
+            print(f"Backlog created: {len(tasks)} tasks.")
+
+        # 2. Loop until complete or limit reached
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            task = kanban.get_next_task()
+            
+            if not task:
+                if kanban.is_complete():
+                    print(f"\n--- MISSION COMPLETE ---", file=sys.stderr)
+                else:
+                    print(f"\n--- PROJECT BLOCKED ---", file=sys.stderr)
+                break
+            
+            print(f"\n[Iteration {iteration}] Executing Task: {task['description']}", file=sys.stderr)
+            
+            # Build specific task prompt
+            full_task_context = f"OBJECTIVE: {objective}\nCURRENT TASK: {task['description']}\nGOAL: Complete the current task while keeping the overall objective in mind."
+            
+            # Execute one step
+            # Note: We use execute=True forced in auto-mode to allow the agent to actually work
+            self.execute = True 
+            self.run_task(full_task_context)
+            
+            # For simplicity in this first version, we mark as done after one attempt
+            # A real version would check exit codes or run a verification command
+            kanban.update_task_state(task['id'], "done", "Executed")
+            
+            # Re-index workspace after each successful task to keep RAG fresh
+            try:
+                from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+                embedder = OllamaEmbeddingProvider()
+                store = LanceDBProvider(db_path)
+                manager = RAGManager(self.workspace, embedder, store)
+                manager.index_workspace()
+            except:
+                pass
 
     def log(self, log_type, content):
         nomos_dir = os.path.join(self.workspace, STATE_DIR_NAME)
@@ -184,7 +245,7 @@ class Runtime:
         # 0. RAG Context
         rag_context = ""
         try:
-            from nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+            from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
             db_path = os.path.join(self.workspace, STATE_DIR_NAME, "vector_store")
             if os.path.exists(db_path):
                 embedder = OllamaEmbeddingProvider()
@@ -328,10 +389,15 @@ def main():
         parser.add_argument("--workspace", default=os.getcwd(), help="Workspace directory")
         parser.add_argument("--profile", default="read-only", help="Profile name (read-only, repo-safe)")
         parser.add_argument("--execute", action="store_true", help="Execute mutating actions")
+        parser.add_argument("--auto", action="store_true", help="Run in autonomous architect mode (Kanban/Overlord)")
         args = parser.parse_args()
         
         runtime = Runtime(args.workspace, profile_name=args.profile, execute=args.execute)
-        runtime.run_task(args.task)
+        
+        if args.auto:
+            runtime.run_autonomous_loop(args.task)
+        else:
+            runtime.run_task(args.task)
     else:
         subparsers = parser.add_subparsers(dest="command")
 
@@ -365,14 +431,14 @@ def main():
             subprocess.run([os.path.join(BASE_DIR, "build.sh")], shell=False, check=True)
         elif args.command == "index":
             try:
-                from nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+                from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
                 workspace = os.path.abspath(os.path.expanduser(args.workspace))
                 db_path = os.path.join(workspace, STATE_DIR_NAME, "vector_store")
                 
                 if args.reset and os.path.exists(db_path):
                     print(f"--- Resetting Index: {db_path} ---", file=sys.stderr)
                     import shutil
-                    shutil.rmtree(db_path)
+                    shutil.rmtree(db_path, ignore_errors=True)
                 
                 os.makedirs(db_path, exist_ok=True)
                 

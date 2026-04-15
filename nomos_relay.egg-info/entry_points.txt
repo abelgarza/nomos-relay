@@ -1,0 +1,2 @@
+[console_scripts]
+nomos = nomos_relay.nomos:main

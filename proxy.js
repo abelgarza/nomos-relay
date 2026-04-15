@@ -82,7 +82,7 @@ const server = http.createServer(async (req, res) => {
                     const lastUserMsg = messages.filter(m => m.role === "user").pop()?.content || "";
                     if (lastUserMsg) {
                         const cleanQuery = lastUserMsg.replace(/"/g, '\\"').replace(/\n/g, ' ');
-                        ragContext = require('child_process').execSync(`/home/abelg/dev/personal/.venv_py314/bin/python3 nomos_rag.py --query "${cleanQuery}"`, { encoding: 'utf8' });
+                        ragContext = require('child_process').execSync(`/home/abelg/dev/personal/.venv_py314/bin/python3 -m nomos_relay.nomos_rag --query "${cleanQuery}"`, { encoding: 'utf8' });
                     }
                 } catch (e) {
                     console.error("RAG Query failed:", e.message);

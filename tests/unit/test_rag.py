@@ -1,7 +1,7 @@
 import pytest
 import os
 import json
-from nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
 
 class MockEmbedder(OllamaEmbeddingProvider):
     def get_embedding(self, text):

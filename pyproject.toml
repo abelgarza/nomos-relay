@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nomos-relay"
+version = "1.6.1"
+authors = [
+  { name="Abel Garza Ramírez" },
+]
+description = "A cybernetic orchestration framework for local AI agents."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "lancedb",
+    "pandas",
+    "requests",
+    "pyarrow",
+]
+
+[project.scripts]
+nomos = "nomos_relay.nomos:main"
+
+[tool.setuptools]
+packages = ["nomos_relay"]
+
+[tool.setuptools.package-data]
+"*" = ["api/*.json"]
