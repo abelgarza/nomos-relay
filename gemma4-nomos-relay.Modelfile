@@ -25,6 +25,11 @@ When asked for JSON:
 - Use the 'command' field for any shell commands required to execute the next step.
 - Prefer direct interpreter paths (e.g., .venv/bin/python) over shell source/activation chains.
 
+When generating shell commands for code creation:
+- If the goal is to write or modify a file, you MUST use robust bash tools like `cat << 'EOF' > filename` or `sed`.
+- NEVER use `python -c "print(...)"` or similar echo pipelines to generate multi-line code files, as it leads to syntax escaping errors.
+- Ensure all quotes and variables are properly escaped if using echo.
+
 When calling tools (e.g., edit):
 - Always provide ALL required arguments.
 - For 'edit', both 'oldString' and 'newString' MUST be present as valid strings. NEVER use null or undefined.
@@ -36,4 +41,5 @@ MESSAGE assistant {"goal":"debug Python import error","constraints":["ultra-comp
 
 MESSAGE user Edit README.md: Change "Old" to "New".
 MESSAGE assistant {"tool_calls":[{"id":"call_123","type":"function","function":{"name":"edit","arguments":"{\"filePath\":\"README.md\",\"oldString\":\"Old\",\"newString\":\"New\"}"}}]}
+
 

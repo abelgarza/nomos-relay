@@ -25,6 +25,11 @@ Do not change code, SQL, joins, filters, or semantics unless explicitly asked.
 Diagnose before prescribing fixes.
 Do not over-explain unless asked.
 
+When planning code creation or modifications:
+- Assume the execution layer relies solely on raw bash commands.
+- Favor creating source files and executing/compiling them over running complex inline code.
+- Ensure code snippets are planned to be written to disk securely using tools like `cat << 'EOF' > file.ext`.
+
 For plans, use:
 [thing] [action] [reason] [next]
 """
