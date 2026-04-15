@@ -17,7 +17,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_PATH = os.path.join(BASE_DIR, "nomos_relay", "api", "relay.schema.json")
 
 # Default security settings
-DEFAULT_DANGEROUS_OPS = ["|", ";", "`", "$("]
+DEFAULT_DANGEROUS_OPS = ["`", "$("]
 DEFAULT_DENYLIST = [
     "rm", "mv", "chmod", "chown", "sudo", "curl", "wget", 
     "ssh", "scp", "dd", "mkfs", "reboot", "shutdown"
@@ -155,7 +155,14 @@ class Runtime:
                 project_context = result["context"]
                 print(f"Project context saved: {project_context.get('tech_stack', 'Unknown')}")
             else:
-                print(f"--- Overlord Resuming Project: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
+                if kanban.is_complete() and objective.lower() not in ["resume", "continue"]:
+                    print(f"--- Overlord Planning New Sprint: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
+                    result = overlord.analyze_and_plan(objective + env_context, current_context=project_context)
+                    kanban.add_tasks(objective, result["tasks"])
+                    kanban.save_context(result["context"])
+                    project_context = result["context"]
+                else:
+                    print(f"--- Overlord Resuming Project: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
 
             # 3. Loop
             iteration = 0
@@ -251,11 +258,6 @@ class Runtime:
         if not cmd_parts:
             return True, "", False
 
-        # 3. Denylist Check (Check ALL words)
-        for part in cmd_parts:
-            if part in DEFAULT_DENYLIST:
-                return False, f"Command '{part}' is in denylist", False
-
         # 4. Workspace Root Check (Profile-based Jail)
         if self.profile.workspace_root:
             if not is_within_path(self.workspace, self.profile.workspace_root):
@@ -270,6 +272,10 @@ class Runtime:
             if i == 0 or (i > 0 and cmd_parts[i-1] in ["&&", "||", ";", "|"]):
                 if part in operators:
                     continue
+                
+                # Check denylist ONLY for command name
+                if part in DEFAULT_DENYLIST:
+                    return False, f"Command '{part}' is in denylist", False
                 
                 # Check this specific command part
                 # If it's in mutating allowlist but NOT in read-only, it's definitely a mutation
@@ -286,8 +292,8 @@ class Runtime:
                     if not self.profile.allow_mutation:
                         return False, f"Mutations are not allowed in profile '{self.profile.name}'", True
                     
-                    if part not in self.profile.mutating_allowlist:
-                        return False, f"Command '{part}' is not in mutation allowlist for profile '{self.profile.name}'", True
+                    if part not in self.profile.mutating_allowlist and part not in self.profile.read_only_allowlist:
+                        return False, f"Command '{part}' is not in allowlist for profile '{self.profile.name}'", True
                 else:
                     if part not in self.profile.read_only_allowlist:
                         return False, f"Command '{part}' is not in read-only allowlist for profile '{self.profile.name}'", False

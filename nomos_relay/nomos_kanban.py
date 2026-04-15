@@ -54,6 +54,28 @@ class NomosKanban:
             })
         self._save(data)
 
+    def add_tasks(self, objective: str, tasks: List[str]):
+        """Appends new tasks to the existing board (for a new sprint/objective)."""
+        if not tasks:
+            return
+            
+        board = self._load()
+        # Find highest ID to avoid collisions
+        next_id = 0
+        if board:
+            next_id = max(t["id"] for t in board) + 1
+            
+        for i, task in enumerate(tasks):
+            board.append({
+                "id": next_id + i,
+                "description": str(task),
+                "state": "todo",
+                "result": "",
+                "attempts": 0,
+                "objective": str(objective)
+            })
+        self._save(board)
+
     def get_full_board(self) -> List[Dict[str, Any]]:
         return self._load()
 

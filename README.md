@@ -66,6 +66,9 @@ nomos "Build a full TUI dashboard based on README.md" --auto --profile developer
 4.  **Execute:** Iterates through tasks, updating its memory (RAG) after each step.
 5.  **Commit:** Automatically commits successful tasks using the Git Agent.
 
+**Continuous Iteration (Sprints):**
+If you run `--auto` with a new instruction after a mission is complete, Nomos will not start from scratch. Instead, it will use the existing project context and RAG memory to start a **New Sprint**, appending new tasks to the Kanban board. This allows for continuous development while maintaining architectural consistency.
+
 ### 3. General Utility
 ```bash
 nomos ask "How do profiles work in this framework?"  # Quick Q&A with the Planner
