@@ -92,10 +92,11 @@ class Runtime:
             os.makedirs(self.workspace, exist_ok=True)
 
     def run_autonomous_loop(self, objective, max_iterations=10):
-        """Orchestrates the autonomous engineering loop using Overlord and Kanban."""
+        """Orchestrates the autonomous engineering loop using Overlord, Kanban and Git."""
         from nomos_relay.nomos_kanban import NomosKanban
         from nomos_relay.nomos_overlord import NomosOverlord
         from nomos_relay.nomos_rag import RAGManager, OllamaEmbeddingProvider, LanceDBProvider
+        from nomos_relay.nomos_git import NomosGitController
         import signal
         
         # Flag to track if user requested shutdown
@@ -119,6 +120,7 @@ class Runtime:
         
         kanban = NomosKanban(db_path)
         overlord = NomosOverlord()
+        git = NomosGitController(self.workspace)
         
         # Incremental RAG Setup
         embedder = OllamaEmbeddingProvider()
@@ -126,18 +128,22 @@ class Runtime:
         rag = RAGManager(self.workspace, embedder, store)
 
         try:
-            # 0. Reconnaissance: Capture basic workspace structure
+            # 0. Git Protection
+            if git.is_git_repo():
+                git.ensure_safe_branch(".nomos")
+
+            # 1. Reconnaissance
             env_context = ""
             try:
                 ls_output = subprocess.check_output(
                     "find . -maxdepth 2 -not -path '*/.*' | sort", 
                     shell=True, cwd=self.workspace, text=True
                 )
-                env_context = f"\nWORKSPACE ENVIRONMENT (Files/Dirs):\n{ls_output.strip()}\n"
+                env_context = f"\nWORKSPACE ENVIRONMENT:\n{ls_output.strip()}\n"
             except:
                 pass
 
-            # 1. Initialize or Resume Board
+            # 2. Initialize or Resume Board
             board = kanban.get_full_board()
             project_context = kanban.load_context()
 
@@ -148,11 +154,10 @@ class Runtime:
                 kanban.save_context(result["context"])
                 project_context = result["context"]
                 print(f"Project context saved: {project_context.get('tech_stack', 'Unknown')}")
-                print(f"Backlog created: {len(result['tasks'])} tasks.")
             else:
                 print(f"--- Overlord Resuming Project: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
 
-            # 2. Loop until complete or limit reached
+            # 3. Loop
             iteration = 0
             while iteration < max_iterations:
                 if shutdown_requested:
@@ -160,10 +165,7 @@ class Runtime:
                     break
                     
                 iteration += 1
-                # Sync RAG before every task
                 rag.index_workspace()
-                
-                # Fetch task
                 task = kanban.get_next_task()
                 
                 if not task:
@@ -175,22 +177,24 @@ class Runtime:
                 
                 print(f"\n[Iteration {iteration}] Executing Task: {task['description']}", file=sys.stderr)
                 
-                # Build context-aware prompt
-                full_task_context = f"OBJECTIVE: {objective}\nPROJECT CONTEXT: {json.dumps(project_context)}\nCURRENT TASK: {task['description']}\nGOAL: Complete the task staying true to the project stack and decisions."
+                full_task_context = f"OBJECTIVE: {objective}\nPROJECT CONTEXT: {json.dumps(project_context)}\nCURRENT TASK: {task['description']}\nGOAL: Complete the task staying true to the project stack."
                 
-                # Execute one step
+                # Execute Task
                 self.execute = True 
                 success, result_msg = self.run_task(full_task_context)
                 
                 if success:
                     kanban.update_task_state(task['id'], "done", "Success")
+                    # Automatic Commit for successful task
+                    if git.is_git_repo() and git.has_uncommitted_changes():
+                        git.commit_task(task['description'])
                 else:
                     attempts = task.get('attempts', 0) + 1
                     if attempts >= 3:
                         print(f"[!] Task failed 3 times. Blocking.", file=sys.stderr)
                         kanban.update_task_state(task['id'], "blocked", result_msg, increment_attempts=True)
                     else:
-                        print(f"[!] Task failed (Attempt {attempts}). Re-evaluating strategy...", file=sys.stderr)
+                        print(f"[!] Task failed (Attempt {attempts}). Re-evaluating...", file=sys.stderr)
                         kanban.update_task_state(task['id'], "doing", result_msg, increment_attempts=True)
 
         finally:

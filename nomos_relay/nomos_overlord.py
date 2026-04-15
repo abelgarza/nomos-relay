@@ -5,7 +5,7 @@ import os
 from typing import List, Dict, Any
 
 class NomosOverlord:
-    def __init__(self, model: str = "gemma4-nomos"):
+    def __init__(self, model: str = "gemma4-nomos-overlord"):
         self.model = model
         self.url = "http://localhost:11434/api/chat"
 
@@ -14,10 +14,7 @@ class NomosOverlord:
         
         context_str = json.dumps(current_context or {}, indent=2)
         
-        prompt = f"""You are the NOMOS OVERLORD. Break down the objective into sequential, atomic, technical tasks.
-You MUST maintain consistency with existing project decisions.
-
-OBJECTIVE:
+        prompt = f"""OBJECTIVE:
 {objective}
 
 EXISTING PROJECT CONTEXT:
@@ -26,21 +23,8 @@ EXISTING PROJECT CONTEXT:
 RECENT LOGS:
 {journal_tail}
 
-CONSTRAINTS:
-- Tasks must be atomic and technical.
-- Identify the Tech Stack (Language, Frameworks) and save it in 'updated_context'.
-- Output ONLY valid JSON.
+Break down the objective into tasks and update context."""
 
-Output format:
-{{
-  "updated_context": {{
-    "tech_stack": "e.g. Go (Bubble Tea)",
-    "architecture": "e.g. MVC",
-    "decisions": ["decision 1", "decision 2"]
-  }},
-  "tasks": ["Task 1", "Task 2"]
-}}
-"""
         try:
             response = requests.post(self.url, json={
                 "model": self.model,
@@ -51,6 +35,7 @@ Output format:
             response.raise_for_status()
             content = response.json()["message"]["content"].strip()
             
+            # Extract JSON
             if "{" in content and "}" in content:
                 content = content[content.find("{"):content.rfind("}")+1]
             

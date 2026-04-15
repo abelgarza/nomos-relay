@@ -4,88 +4,111 @@
   <img src="https://img.shields.io/github/actions/workflow/status/abelgarza/nomos-relay/ci.yml?branch=main&style=for-the-badge&logo=github" alt="CI Status">
   <img src="https://img.shields.io/github/license/abelgarza/nomos-relay?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Version">
-  <img src="https://img.shields.io/badge/Node.js-20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node Version">
   <img src="https://img.shields.io/badge/Ollama-Compatible-black?style=for-the-badge&logo=ollama" alt="Ollama">
 </p>
 
 ---
 
-**Nomos Relay** is a cybernetic orchestration framework for local AI agents. It provides a deterministic bridge between stochastic reasoning models and secure system execution.
+**Nomos Relay** is a cybernetic orchestration framework for local AI agents. It provides a deterministic bridge between stochastic reasoning models and secure system execution. 
 
-Inspired by the concept of *Nomos* (the ordering of space and law) and the *Caveman* philosophy of linguistic compression, this tool ensures that local agents (like Gemma 4) operate within strict safety boundaries while maintaining perfect structural integrity in their output.
+Inspired by the concept of *Nomos* (the ordering of space and law) and the *Caveman* philosophy of linguistic compression, this framework ensures that local agents (like Gemma 4) operate within strict safety boundaries while maintaining perfect structural integrity in their output.
 
-## Key Features
+## Multi-Agent Architecture
 
-- **Cognitive Memory (RAG):** Deep codebase context using LanceDB and Ollama embeddings.
-- **Fail-Closed Governance:** Strict security profiles (read-only, repo-safe, developer).
-- **Universal Proxy:** OpenAI-compatible middleware for seamless integration with Cursor and OpenCode.
-- **Cybernetic Regulation:** Deterministic Planning/Relay architecture.
+Nomos Relay operates through a collaborative loop where each agent has a specific, "constitutional" role defined in its Modelfile:
 
-## Tech Stack
-
-<p align="left">
-  <img src="https://img.shields.io/badge/Gemma_4-Model-blue?style=flat-square&logo=googlegemini" alt="Gemma 4">
-  <img src="https://img.shields.io/badge/LanceDB-Vector_DB-orange?style=flat-square" alt="LanceDB">
-  <img src="https://img.shields.io/badge/Ollama-Inference-black?style=flat-square" alt="Ollama">
-  <img src="https://img.shields.io/badge/Pytest-Testing-white?style=flat-square&logo=pytest" alt="Pytest">
-</p>
-
-## Architecture & Roles
-
-Nomos Relay operates through a multi-agent cybernetic loop where each component has a specific, strict role:
-
-| Component | Modelfile | Responsibility |
+| Agent | Role | Responsibility |
 | :--- | :--- | :--- |
-| **Planner** | `gemma4-nomos` | The "Brain". Analyzes context and task to generate a compressed execution plan. |
-| **Relay** | `gemma4-nomos-relay` | The "Transducer". Converts plans into strict JSON and bash commands (Fail-Closed). |
-| **Overlord** | `gemma4-nomos` | The "Architect". Manages the Kanban board, breaking down high-level objectives. |
-| **Cloud** | `gemma4-nomos-cloud` | The "Observer". High-parameter model for TPU-powered remote orchestration. |
-
-## Core Components
-
-- **`nomos.py`**: The runtime engine. Manages the task lifecycle, enforces profile policies, and orchestrates the autonomous loop.
-- **`nomos_rag.py`**: Cognitive memory engine. Uses LanceDB and Ollama embeddings to provide deep codebase context.
-- **`nomos_kanban.py`**: Project state manager. Persists tasks and progress in LanceDB.
-- **`nomos_overlord.py`**: Strategic coordinator that decomposes objectives into the Kanban board.
-- **`proxy.js`**: OpenAI-compatible middleware with integrated RAG support.
-
-## Getting Started
-
-### 1. Install Dependencies
-```bash
-pip install lancedb requests pytest
-```
-
-### 2. Build the Models
-```bash
-./build.sh
-```
-
-### 3. Index your Workspace (RAG)
-```bash
-python3 nomos.py index
-```
-
-### 4. Run a Task
-```bash
-python3 nomos.py --workspace ~/my-project --profile repo-safe "Initialize a git repository" --execute
-```
-
-## Testing
-Nomos prioritizes reliability through formal verification.
-```bash
-PYTHONPATH=. pytest tests/
-```
-
-## State & Audit
-Every workspace managed by Nomos contains a `.nomos/` directory:
-- `vector_store/`: Persistent LanceDB database.
-- `journal.log`: Chronological record of all intents and actions.
-- `last_plan.txt`: The reasoning trace.
-- `last_relay.json`: The structured command output.
-
-## License
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+| **Overlord** | Strategic | Decomposes high-level objectives into technical Kanban tasks. Maintains tech stack consistency. |
+| **Planner** | Tactical | Analyzes codebase context (RAG) and the current task to generate a compressed plan. |
+| **Relay** | Transducer | Converts plans into strict JSON/Bash commands. Enforces Fail-Closed safety. |
+| **Git** | Versioning | Specialized in analyzing diffs and generating Conventional Commits. |
+| **Cloud** | Observer | High-parameter model variant for remote/TPU-powered orchestration. |
 
 ---
-*Created by Abel Garza Ramírez. A Cybernetic approach to AI Agency.*
+
+## Installation
+
+### 1. Install Python Package
+```bash
+# Clone the repo and install in editable mode
+pip install -e .
+```
+
+### 2. Build the Model Constitutions
+Ensure you have [Ollama](https://ollama.com/) installed and running.
+```bash
+nomos build
+```
+
+---
+
+## The Nomos CLI
+
+The `nomos` command is the primary entry point for both interactive and autonomous development.
+
+### 1. Task Execution (One-Shot)
+Run a single task in a specific security profile:
+```bash
+nomos "List all python files in src/" --profile read-only
+nomos "Create a basic API with FastAPI" --profile developer --execute
+```
+
+### 2. Autonomous Architect Mode (`--auto`)
+The most powerful mode. Nomos becomes an autonomous engineer that iterates until the goal is met.
+```bash
+nomos "Build a full TUI dashboard based on README.md" --auto --profile developer
+```
+**In this mode, Nomos will:**
+1.  **Recon:** Scan the environment to detect the language (Go, Python, etc).
+2.  **Plan:** Overlord creates a Kanban board in `.nomos/kanban.json`.
+3.  **Branch:** If a Git repo is detected, it moves to a safe `.nomos` branch.
+4.  **Execute:** Iterates through tasks, updating its memory (RAG) after each step.
+5.  **Commit:** Automatically commits successful tasks using the Git Agent.
+
+### 3. General Utility
+```bash
+nomos ask "How do profiles work in this framework?"  # Quick Q&A with the Planner
+nomos list                                           # List available Nomos models
+nomos index --reset                                  # Wipe and rebuild RAG memory
+```
+
+---
+
+## Cognitive Memory (RAG)
+
+Nomos uses **LanceDB** to maintain a deep semantic understanding of your codebase.
+
+- **Incremental Sync:** In `--auto` mode, Nomos automatically re-indexes changed files after each task, ensuring the next step is always context-aware.
+- **Manual Indexing:** Run `nomos index` to update the memory after manual changes.
+- **Hard Reset:** Use `nomos index --reset` to clear the vector store and start fresh.
+
+Memory state lives in the `.nomos/` directory of your workspace.
+
+---
+
+## Integration Examples (Extending the Framework)
+
+Nomos Relay is designed to be a "Cybernetic Core" that can be used by other tools:
+
+### OpenAI-Compatible Proxy
+Running `node proxy.js` starts a middleware that allows any OpenAI-compatible tool to use Nomos agents and RAG.
+
+### Implementation Case Studies:
+- **`oc-nomos.sh` (OpenCode):** Launches OpenCode using Nomos Relay as the backend, giving the editor full codebase awareness and execution safety.
+- **`pi-nomos.sh` (Pi):** Integrates the Pi agent with Nomos to provide a terminal-based cybernetic assistant.
+
+---
+
+## Security Profiles
+
+Nomos enforces strict "Fail-Closed" governance through profiles:
+
+- **`read-only`**: (Default) Discovery only. No filesystem mutations allowed.
+- **`repo-safe`**: Allows `git`, `mkdir`, and `touch`. Safe for repo management.
+- **`developer`**: Full engineering access. Can use `pip`, `npm`, `python`, etc.
+
+Every command is validated against a global `DENYLIST` to prevent system-level damage.
+
+---
+*Created by **Abel Garza Ramírez**. A Cybernetic approach to AI Agency.*
