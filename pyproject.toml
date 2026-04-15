@@ -18,9 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "lancedb",
-    "pandas",
     "requests",
-    "pyarrow",
 ]
 
 [project.scripts]

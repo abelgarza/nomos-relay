@@ -53,7 +53,7 @@ Nomos Relay operates through a multi-agent cybernetic loop where each component 
 
 ### 1. Install Dependencies
 ```bash
-pip install lancedb pandas requests pytest
+pip install lancedb requests pytest
 ```
 
 ### 2. Build the Models
