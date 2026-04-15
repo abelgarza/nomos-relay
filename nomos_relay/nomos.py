@@ -48,6 +48,12 @@ PROFILES = {
         allow_mutation=True,
         mutating_allowlist=["mkdir", "touch", "git", "python3", "python", "node", "npm", "pip", "go"],
         read_only_allowlist=["pwd", "ls", "find", "cat", "grep", "git", "ls -R", "go"]
+    ),
+    "god": Profile(
+        "god",
+        allow_mutation=True,
+        mutating_allowlist=["*"], # Special flag for all
+        read_only_allowlist=["*"]  # Special flag for all
     )
 }
 
@@ -90,6 +96,22 @@ class Runtime:
         # Ensure workspace exists
         if not os.path.exists(self.workspace):
             os.makedirs(self.workspace, exist_ok=True)
+            
+        # Optional: Load context if .nomos exists
+        self.project_context = None
+        self.overlord = None
+        self.kanban = None
+        
+        db_path = os.path.join(self.workspace, STATE_DIR_NAME)
+        if os.path.exists(db_path):
+            try:
+                from nomos_relay.nomos_kanban import NomosKanban
+                from nomos_relay.nomos_overlord import NomosOverlord
+                self.kanban = NomosKanban(db_path)
+                self.project_context = self.kanban.load_context()
+                self.overlord = NomosOverlord()
+            except ImportError:
+                pass
 
     def run_autonomous_loop(self, objective, max_iterations=10):
         """Orchestrates the autonomous engineering loop using Overlord, Kanban and Git."""
@@ -118,8 +140,14 @@ class Runtime:
         db_path = os.path.join(self.workspace, STATE_DIR_NAME, "vector_store")
         os.makedirs(db_path, exist_ok=True)
         
-        kanban = NomosKanban(db_path)
-        overlord = NomosOverlord()
+        # Use existing or initialize new
+        if not self.kanban:
+            self.kanban = NomosKanban(os.path.join(self.workspace, STATE_DIR_NAME))
+        if not self.overlord:
+            self.overlord = NomosOverlord()
+            
+        kanban = self.kanban
+        overlord = self.overlord
         git = NomosGitController(self.workspace)
         
         # Incremental RAG Setup
@@ -145,14 +173,18 @@ class Runtime:
 
             # 2. Initialize or Resume Board
             board = kanban.get_full_board()
-            project_context = kanban.load_context()
+            if self.project_context is None:
+                self.project_context = kanban.load_context()
+            
+            project_context = self.project_context
 
             if not board or project_context == {}:
                 print(f"--- Overlord Initializing Project ---", file=sys.stderr)
                 result = overlord.analyze_and_plan(objective + env_context, current_context=project_context)
                 kanban.init_board(objective, result["tasks"])
                 kanban.save_context(result["context"])
-                project_context = result["context"]
+                self.project_context = result["context"]
+                project_context = self.project_context
                 print(f"Project context saved: {project_context.get('tech_stack', 'Unknown')}")
             else:
                 if kanban.is_complete() and objective.lower() not in ["resume", "continue"]:
@@ -160,7 +192,8 @@ class Runtime:
                     result = overlord.analyze_and_plan(objective + env_context, current_context=project_context)
                     kanban.add_tasks(objective, result["tasks"])
                     kanban.save_context(result["context"])
-                    project_context = result["context"]
+                    self.project_context = result["context"]
+                    project_context = self.project_context
                 else:
                     print(f"--- Overlord Resuming Project: {project_context.get('tech_stack', 'Unknown')} ---", file=sys.stderr)
 
@@ -188,8 +221,11 @@ class Runtime:
                 
                 # Execute Task
                 self.execute = True 
-                success, result_msg = self.run_task(full_task_context)
+                success, result_msg = self.run_task(full_task_context, project_context=project_context, overlord=overlord)
                 
+                # Save updated context (Overlord might have updated it during learning)
+                kanban.save_context(project_context)
+
                 if success:
                     kanban.update_task_state(task['id'], "done", "Success")
                     # Automatic Commit for successful task
@@ -278,6 +314,15 @@ class Runtime:
                     return False, f"Command '{part}' is in denylist", False
                 
                 # Check this specific command part
+                # Wildcard check for God Mode
+                if "*" in self.profile.mutating_allowlist or "*" in self.profile.read_only_allowlist:
+                    # In God Mode, we still identify mutations for the --execute flag requirement
+                    # But we don't block based on the list
+                    if part not in self.profile.read_only_allowlist and part != "git":
+                        is_mutation = True
+                    # Skip the rest of the standard allowlist logic for this part
+                    continue
+
                 # If it's in mutating allowlist but NOT in read-only, it's definitely a mutation
                 if part in self.profile.mutating_allowlist and part not in self.profile.read_only_allowlist:
                     is_mutation = True
@@ -312,7 +357,11 @@ class Runtime:
 
         return True, "", is_mutation
 
-    def run_task(self, task):
+    def run_task(self, task, project_context=None, overlord=None):
+        # Use defaults from instance if not provided
+        project_context = project_context if project_context is not None else self.project_context
+        overlord = overlord if overlord is not None else self.overlord
+
         # 0. RAG Context
         rag_context = ""
         try:
@@ -346,12 +395,12 @@ class Runtime:
         print(f"\n--- Structuring [gemma4-nomos-relay] ---", file=sys.stderr)
         if not os.path.exists(SCHEMA_PATH):
             print(f"Error: Schema not found at {SCHEMA_PATH}", file=sys.stderr)
-            return
+            return False, "Schema not found"
 
         with open(SCHEMA_PATH, 'r') as f:
             schema = json.load(f)
         
-        relay_prompt = f"Task: {task}. Plan: {plan_content}. Constraints: ultra-compressed, match schema. IMPORTANT: The 'command' field must contain the EXACT shell command to achieve the goal. DO NOT use shell operators like &&, |, or >. provide a single direct command."
+        relay_prompt = f"Task: {task}. Plan: {plan_content}. Constraints: ultra-compressed, match schema. IMPORTANT: The 'command' field must contain the EXACT shell command to achieve the goal, including any file writing (e.g. cat << 'EOF' > file) or shell operators if they are present in the plan."
         relay_messages = [{"role": "user", "content": relay_prompt}]
         relay_res = query_ollama("gemma4-nomos-relay", relay_messages, format_schema=schema, temperature=0)
         relay_content = relay_res["message"]["content"]
@@ -393,7 +442,7 @@ class Runtime:
                 msg = f"BLOCKED: Malformed relay protocol. Errors: {'; '.join(validation_errors)}"
                 print(f"\n--- {msg} ---", file=sys.stderr)
                 self.log("journal", f"Task: {task} | Result: {msg}")
-                return
+                return False, msg
 
             print(json.dumps(structured, indent=2))
             
@@ -403,16 +452,31 @@ class Runtime:
                 msg = "BLOCKED: Execution requested but no command generated by relay"
                 print(f"\n--- {msg} ---", file=sys.stderr)
                 self.log("journal", f"Task: {task} | Result: {msg}")
-                return
+                return False, msg
 
             if cmd:
+                # Basic Runtime Audit
                 allowed, reason, is_mutation = self.command_is_allowed(cmd)
 
                 if not allowed:
-                    msg = f"BLOCKED: {reason}"
+                    msg = f"BLOCKED (Runtime): {reason}"
                     print(f"\n--- {msg} ---", file=sys.stderr)
                     self.log("journal", f"Task: {task} | Command: {cmd} | Result: {msg}")
                     return False, msg
+
+                # Overlord Strategic Audit
+                if overlord and project_context is not None:
+                    print(f"\n--- Overlord Auditing: {cmd} ---", file=sys.stderr)
+                    audit = overlord.audit_command(cmd, task, project_context, self.profile.name)
+                    if audit.get("decision") == "BLOCKED":
+                        msg = f"BLOCKED (Overlord): {audit.get('reason')}"
+                        if audit.get("suggestions"):
+                            msg += f" Suggestions: {audit.get('suggestions')}"
+                        print(f"\n--- {msg} ---", file=sys.stderr)
+                        self.log("journal", f"Task: {task} | Command: {cmd} | Result: {msg}")
+                        return False, msg
+                    else:
+                        print(f"--- Overlord Approved: {audit.get('reason', 'Aligns with project')} ---", file=sys.stderr)
 
                 if is_mutation and not self.execute:
                     msg = "DRY RUN: Mutation blocked. Use --execute to run."
@@ -422,16 +486,32 @@ class Runtime:
 
                 print(f"\n--- Executing: {cmd} ---", file=sys.stderr)
                 try:
-                    # Execute in workspace using shell=True to support operators
+                    # Execute in workspace using shell=True with bash as executable
                     result = subprocess.run(
                         cmd, 
                         shell=True, 
                         capture_output=True, 
                         text=True, 
-                        cwd=self.workspace
+                        cwd=self.workspace,
+                        executable="/bin/bash"
                     )
                     
-                    if result.returncode == 0:
+                    success = result.returncode == 0
+                    output = result.stdout if success else result.stderr
+                    
+                    # Incremental Learning
+                    if overlord and project_context is not None:
+                        new_context = overlord.learn_from_result(cmd, success, output, project_context)
+                        if isinstance(project_context, dict):
+                            project_context.update(new_context)
+                        
+                        # Persist updated context if possible
+                        if self.kanban:
+                            self.kanban.save_context(project_context)
+                        elif project_context is self.project_context and self.kanban:
+                            self.kanban.save_context(self.project_context)
+
+                    if success:
                         if result.stdout:
                             print(result.stdout)
                         self.log("journal", f"Task: {task} | Command: {cmd} | Status: Success")

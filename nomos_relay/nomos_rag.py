@@ -112,10 +112,10 @@ class RAGManager:
         documents = []
         files_to_update = []
 
-        for root, _, files in os.walk(self.workspace_path):
-            if ".git" in root or ".nomos" in root or "__pycache__" in root or "node_modules" in root:
-                continue
-            
+        for root, dirs, files in os.walk(self.workspace_path):
+            # Prune directories we don't want to traverse
+            dirs[:] = [d for d in dirs if d not in [".git", ".nomos", "__pycache__", "node_modules", ".venv", "venv", "env", "build", "dist", ".pytest_cache", ".idea", ".vscode"]]
+
             for file in files:
                 if file.endswith(extensions):
                     path = os.path.join(root, file)
