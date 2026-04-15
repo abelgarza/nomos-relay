@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Resolve script directory
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+cd "$DIR"
+
 # Build new Nomos models
 echo "--- Building Nomos Models ---"
 ollama pull nomic-embed-text

@@ -2,7 +2,7 @@ const http = require('http');
 const crypto = require('crypto');
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
-const SCHEMA_PATH = require('path').join(__dirname, 'api', 'relay.schema.json');
+const SCHEMA_PATH = require('path').join(__dirname, 'nomos_relay', 'api', 'relay.schema.json');
 const schema = require(SCHEMA_PATH);
 
 async function queryOllama(model, messages, formatSchema = null) {

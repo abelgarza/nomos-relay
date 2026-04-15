@@ -12,8 +12,9 @@ from datetime import datetime
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 STATE_DIR_NAME = ".nomos"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SCHEMA_PATH = os.path.join(BASE_DIR, "api", "relay.schema.json")
+# BASE_DIR should be the project root, not the package subdir
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCHEMA_PATH = os.path.join(BASE_DIR, "nomos_relay", "api", "relay.schema.json")
 
 # Default security settings
 DEFAULT_DANGEROUS_OPS = [">", ">>", "|", "&", ";", "`", "$("]
@@ -116,9 +117,12 @@ class Runtime:
         iteration = 0
         while iteration < max_iterations:
             iteration += 1
+            # Refresh Kanban instance to ensure fresh disk state
+            kanban = NomosKanban(db_path)
             task = kanban.get_next_task()
             
             if not task:
+                # print(f"[DEBUG] No task found in iteration {iteration}", file=sys.stderr)
                 if kanban.is_complete():
                     print(f"\n--- MISSION COMPLETE ---", file=sys.stderr)
                 else:
